@@ -15,7 +15,32 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
- 
+
+var fs = require('fs');
+
+function json_parse(content)
+{
+	var obj = null;
+	if (content == null) return null;
+	try{ obj = JSON.parse(content); } catch(e) {}
+	return obj;
+}
+function readFile(path)
+{
+	var content = null;
+	try{ content = fs.readFileSync(path, "utf8"); } catch(e) {} 
+	return content; 
+}
+function isDirectory(path)
+{
+	return fs.lstatSync(path).isDirectory(); 
+}
+function getDirectories(path)
+{
+	return fs.readdirSync(path).map( (s) => path + "/" + s ).filter(isDirectory);
+}
+
+
 module.exports = function (class_name)
 {
 	if (module.exports.modules[class_name] != undefined)
@@ -34,7 +59,7 @@ module.exports = function (class_name)
 			if (m_path != null)
 			{
 				var m = require(m_path);
-				var a = class_name.split(".").slice(i-1);
+				var a = class_name.split(".").slice(i);
 				var o = module.exports.attr(m, a);
 				module.exports.modules[class_name] = o;
 				return o;
@@ -49,13 +74,15 @@ module.exports = function (class_name)
 	return null;
 }
 
+module.exports.include_src_path = [];
+module.exports.packages_cache = null;
 module.exports.modules = {};
 module.exports.add = function (o)
 {
 	module.exports.modules[o.getClassName()] = o;
 	return o;
 }
-module.exports.addExport = function (e, o)
+module.exports.add_export = function (e, o)
 {
 	var class_name = o.getClassName();
 	var arr = class_name.split(".");
@@ -77,7 +104,7 @@ module.exports.addExport = function (e, o)
 	
 	return e;
 }
-module.exports.addExports = function(e, k)
+module.exports.add_exports = function(e, k)
 {
 	if (k==undefined) k="";
 	for (var key in e)
@@ -89,9 +116,61 @@ module.exports.addExports = function(e, k)
 		}
 		else if (typeof e[key] == "object")
 		{
-			module.exports.addExports(e[key], (k != "") ? (k + "." + key) : key);
+			module.exports.add_exports(e[key], (k != "") ? (k + "." + key) : key);
 		}
 	}
+}
+module.exports.resolve = function (module_name)
+{
+	var path = null;
+	module_name = module.exports.convert_to_package_name(module_name);
+	
+	if (module.exports.packages_cache == null)
+	{
+		module.exports.packages_cache = module.exports.load_packages();
+	}
+	
+	if (module.exports.packages_cache[module_name])
+	{
+		return module.exports.packages_cache[module_name].get("path") + "/index.js";
+	}
+	
+	try { path = require.resolve(module_name); } catch(e) {}
+	
+	return path;
+}
+module.exports.convert_to_package_name = function (module_name)
+{
+	module_name = module_name.replace(".", "-").toLowerCase() + "-nodejs";
+	if (module_name.substr(0, 7) == "runtime") module_name = "bayrell-" + module_name;
+	return module_name;
+}
+module.exports.load_packages = function()
+{
+	var arr = module.exports.include_src_path;
+	arr = arr.reduce((arr, path) => arr.concat( getDirectories(path) ), []);
+	arr = arr.map( (s) => s + "/nodejs" );
+	arr = arr.map
+	(
+		(path) => 
+		{ return new Map().set("name", "").set("path", path).set("content", readFile(path + "/package.json")); } 
+	);
+	arr = arr.filter( (item) => item.get("content") != null );
+	arr = arr.map
+	(
+		(item) => { return item.set("content", json_parse(item.get("content"))); } 
+	);
+	arr = arr.map
+	(
+		(item) => { return item.set("name", (item.get("content") != null) ? item.get("content").name : ""); }
+	);
+	arr = arr.filter( (item) => item.get("name") != "" && item.get("content") != null );
+	var obj = {}; arr.forEach( (item) => { obj[item.get("name")] = item } );
+	return obj;
+}
+module.exports.add_src = function(path)
+{
+	module.exports.include_src_path.push(path);
 }
 module.exports.attr = function (obj, key)
 {
@@ -103,12 +182,4 @@ module.exports.attr = function (obj, key)
 		return module.exports.attr(obj[k], key.slice(1));
 	}
 	return null;
-}
-module.exports.resolve = function (module_name)
-{
-	var path = null;
-	module_name = module_name.replace(".", "-").toLowerCase() + "-nodejs";
-	if (module_name.substr(0, 7) == "runtime") module_name = "bayrell-" + module_name;
-	try { path = require.resolve(module_name); } catch(e) {}
-	return path;
 }
