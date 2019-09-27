@@ -1,0 +1,16 @@
+{
+  "description": "Bayrell Runtime Library",
+  "license": "Apache-2.0",
+  "contributors": [
+    {
+      "name": "Ildar Bikmamatov",
+      "email": "support@bayrell.org"
+    }
+  ],
+  "files": [
+    "*.js"
+  ],
+  "main": "index.js",
+  "name": "bayrell",
+  "version": "0.8.0"
+}
