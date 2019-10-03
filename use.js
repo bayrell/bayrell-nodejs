@@ -43,94 +43,70 @@ function getDirectories(path)
 
 module.exports = function (class_name)
 {
-	if (module.exports.modules[class_name] != undefined)
-	{
-		return module.exports.modules[class_name];
-	}
-	
+	if (class_name == "Error") return Error;
+	if (module.exports.modules[class_name] != undefined) return module.exports.modules[class_name];
+	if (module.exports.modules[class_name] === null) return null;
 	var arr = class_name.split(".");
 	for (var i=arr.length-1; i>0; i--)
 	{
 		var module_name = arr.slice(0, i).join(".");
-		
-		try
+		module_name = module.exports.convert_to_package_name(module_name);
+		var m_path = module.exports.resolve(module_name);
+		if (m_path != null)
 		{
-			var m_path = module.exports.resolve(module_name);
-			if (m_path != null)
+			require(m_path);
+			if (module.exports.modules[class_name] != undefined)
 			{
-				var m = require(m_path);
-				var a = class_name.split(".").slice(i);
-				var o = module.exports.attr(m, a);
-				module.exports.modules[class_name] = o;
-				return o;
+				return module.exports.modules[class_name];
 			}
 		}
-		catch(e) 
-		{
-		}
-		
 	}
-	
+	module.exports.modules[class_name] = null;
 	return null;
 }
 
+module.exports.include_modules_path = [];
 module.exports.include_src_path = [];
 module.exports.packages_cache = null;
 module.exports.modules = {};
 module.exports.add = function (o)
 {
-	module.exports.modules[o.getClassName()] = o;
+	module.exports.modules[o.getCurrentClassName()] = o;
 	return o;
 }
-module.exports.add_export = function (e, o)
+module.exports.add_exports = function(e)
 {
-	var class_name = o.getClassName();
-	var arr = class_name.split(".");
-	var t = e;
-	
-	for (var i=0; i<arr.length; i++)
-	{
-		var s = arr[i];
-		if (i == arr.length - 1)
-		{
-			t[s] = o;
-		}
-		else
-		{
-			if (t[s] == undefined) t[s] = {};
-			t = t[s];
-		}
-	}
-	
-	return e;
-}
-module.exports.add_exports = function(e, k)
-{
-	if (k==undefined) k="";
 	for (var key in e)
 	{
 		if (typeof e[key] == "function")
 		{
-			var class_name = (k != "") ? (k + "." + key) : key;
+			var class_name = e[key].getCurrentClassName();
 			module.exports.modules[class_name] = e[key];
 		}
 		else if (typeof e[key] == "object")
 		{
-			module.exports.add_exports(e[key], (k != "") ? (k + "." + key) : key);
+			module.exports.add_exports(e[key]);
 		}
 	}
+}
+module.exports.add_src = function(path)
+{
+	module.exports.include_src_path.push(path);
+}
+module.exports.add_modules = function(path)
+{
+	module.exports.include_modules_path.push(path);
 }
 module.exports.resolve = function (module_name)
 {
 	var path = null;
-	module_name = module.exports.convert_to_package_name(module_name);
 	
 	if (module.exports.packages_cache == null)
 	{
 		module.exports.packages_cache = module.exports.load_packages();
 	}
 	
-	if (module.exports.packages_cache[module_name])
+	if (module.exports.packages_cache[module_name] != undefined)
 	{
 		return module.exports.packages_cache[module_name].get("path") + "/index.js";
 	}
@@ -139,17 +115,25 @@ module.exports.resolve = function (module_name)
 	
 	return path;
 }
+module.exports.require = function (module_name)
+{
+	var m_path = module.exports.resolve(module_name);
+	if (m_path == null) return null;
+	return require(m_path);
+}
+module.exports.load = function (module_name)
+{
+	module_name = module.exports.convert_to_package_name(module_name);
+	return module.exports.require(module_name);
+}
 module.exports.convert_to_package_name = function (module_name)
 {
 	module_name = module_name.replace(".", "-").toLowerCase() + "-nodejs";
 	if (module_name.substr(0, 7) == "runtime") module_name = "bayrell-" + module_name;
 	return module_name;
 }
-module.exports.load_packages = function()
+module.exports.read_packages = function(arr)
 {
-	var arr = module.exports.include_src_path;
-	arr = arr.reduce((arr, path) => arr.concat( getDirectories(path) ), []);
-	arr = arr.map( (s) => s + "/nodejs" );
 	arr = arr.map
 	(
 		(path) => 
@@ -168,9 +152,21 @@ module.exports.load_packages = function()
 	var obj = {}; arr.forEach( (item) => { obj[item.get("name")] = item } );
 	return obj;
 }
-module.exports.add_src = function(path)
+module.exports.load_packages = function()
 {
-	module.exports.include_src_path.push(path);
+	/* Include Modules Dir */
+	var arr = module.exports.include_modules_path;
+	arr = arr.reduce((arr, path) => arr.concat( getDirectories(path) ), []);
+	var obj1 = module.exports.read_packages(arr);
+	
+	/* Include Source Dir */
+	var arr = module.exports.include_src_path;
+	arr = arr.reduce((arr, path) => arr.concat( getDirectories(path) ), []);
+	arr = arr.map( (s) => s + "/nodejs" );
+	var obj2 = module.exports.read_packages(arr);
+	
+	for (var k in obj2) obj1[k] = obj2[k];
+	return obj1;
 }
 module.exports.attr = function (obj, key)
 {
