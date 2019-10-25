@@ -37,6 +37,7 @@ function isDirectory(path)
 }
 function getDirectories(path)
 {
+	if (!fs.existsSync(path)) return [];
 	return fs.readdirSync(path).map( (s) => path + "/" + s ).filter(isDirectory);
 }
 

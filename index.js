@@ -18,6 +18,6 @@
 
 module.exports = 
 {
-	VERSION: '0.8.2',
+	VERSION: '0.8.3',
 	"use": require("./use.js"),
 };
