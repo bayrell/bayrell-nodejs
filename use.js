@@ -17,6 +17,7 @@
  */
 
 var fs = require('fs');
+var mpath = require('path');
 
 function json_parse(content)
 {
@@ -45,6 +46,7 @@ function getDirectories(path)
 module.exports = function (class_name)
 {
 	if (class_name == "Error") return Error;
+	if (class_name == "") return null;
 	if (module.exports.modules[class_name] != undefined) return module.exports.modules[class_name];
 	if (module.exports.modules[class_name] === null) return null;
 	var arr = class_name.split(".");
@@ -66,13 +68,17 @@ module.exports = function (class_name)
 	return null;
 }
 
+module.exports.VERSION = "0.10.0";
 module.exports.include_modules_path = [];
 module.exports.include_src_path = [];
 module.exports.packages_cache = null;
 module.exports.modules = {};
 module.exports.add = function (o)
 {
-	module.exports.modules[o.getCurrentClassName()] = o;
+	if (o == null || o == undefined) return o;
+	var class_name = o.getCurrentClassName()
+	if (class_name == null || class_name == undefined) return o;
+	module.exports.modules[class_name] = o;
 	return o;
 }
 module.exports.add_exports = function(e)
@@ -81,8 +87,7 @@ module.exports.add_exports = function(e)
 	{
 		if (typeof e[key] == "function")
 		{
-			var class_name = e[key].getCurrentClassName();
-			module.exports.modules[class_name] = e[key];
+			module.exports.add(e[key]);
 		}
 		else if (typeof e[key] == "object")
 		{
@@ -92,11 +97,11 @@ module.exports.add_exports = function(e)
 }
 module.exports.add_src = function(path)
 {
-	module.exports.include_src_path.push(path);
+	module.exports.include_src_path.push(mpath.resolve(path));
 }
 module.exports.add_modules = function(path)
 {
-	module.exports.include_modules_path.push(path);
+	module.exports.include_modules_path.push(mpath.resolve(path));
 }
 module.exports.resolve = function (module_name)
 {
